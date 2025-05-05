@@ -1,0 +1,138 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <title>Preisvergleich Tool</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            padding: 20px;
+        }
+        label {
+            display: inline-block;
+            width: 300px;
+            margin-bottom: 6px;
+        }
+        input[type="range"] {
+            width: 300px;
+        }
+        .slider-container {
+            margin-bottom: 15px;
+        }
+        .results {
+            background: #f9f9f9;
+            padding: 15px;
+            border-radius: 8px;
+            border: 1px solid #ccc;
+            margin-top: 20px;
+            width: 600px;
+        }
+    </style>
+</head>
+<body>
+
+<h2>🔧 Preisvergleich: mit und ohne Filtration</h2>
+<div id="sliders"></div>
+<div class="results" id="results"></div>
+
+<script>
+    const slidersData = {
+        // Shared
+        "Strompreis in Euro pro kWh": [0.17, 0, 0.5, 0.01],
+        "Ofenleistung in kW": [125, 0, 1000, 1],
+        "Neualu Preis in Euro pro Kilogramm": [2.36, 0, 5, 0.01],
+        "Schrottpreis in Euro pro Kilogramm": [1.74, 0, 5, 0.01],
+        "Gaspreis in Euro pro Kilogramm": [0.850, 0, 5, 0.01],
+        "AlCr20 Preis in Euro pro Kilogramm": [12.26, 0, 30, 0.01],
+        "AlMn25 Preis in Euro pro Kilogramm": [15.20, 0, 30, 0.01],
+        "Chargengröße in Kilogramm": [90, 0, 1000, 0.01],
+        "Filterpreis": [15, 0, 50, 0.01],
+
+        // f1
+        "Aufschmelzzeit f1 (h)": [1.0, 0, 3, 0.01],
+        "Haltezeit f1 (h)": [0.5, 0, 3, 0.01],
+        "Verschleiß/Zusatzkosten f1": [0.10, 0, 1, 0.01],
+
+        // f2
+        "Aufschmelzzeit f2 (h)": [1.0, 0, 3, 0.01],
+        "Haltezeit f2 (h)": [0.5, 0, 3, 0.01],
+        "Elek. Vorwärmzeit f2 (h)": [3.0, 0, 10, 0.01],
+        "Elek. Vorwärmleistung f2 (kW)": [15.0, 0, 30, 0.01],
+        "Gasvorwärmzeit f2 (h)": [2.0, 0, 5, 0.01],
+        "Gasverbrauch f2 (kg/h)": [7.8, 0, 15, 0.01],
+        "AlCr20-Zugabe f2 (kg/kg)": [1.0, 0, 5, 0.01],
+        "AlMn25-Zugabe f2 (kg/kg)": [0, 0, 5, 0.01],
+        "Verlust durch Filtration f2": [0.15, 0, 1, 0.01],
+        "Verschleiß/Zusatzkosten f2": [0.3, 0, 1, 0.01],
+    };
+
+    const sliderValues = {};
+
+    function createSliders() {
+        const container = document.getElementById("sliders");
+
+        for (const [labelText, [defaultVal, min, max, step]] of Object.entries(slidersData)) {
+            const div = document.createElement("div");
+            div.className = "slider-container";
+
+            const label = document.createElement("label");
+            label.innerText = `${labelText}: `;
+
+            const valueSpan = document.createElement("span");
+            valueSpan.textContent = defaultVal.toFixed(2);
+
+            const input = document.createElement("input");
+            input.type = "range";
+            input.min = min;
+            input.max = max;
+            input.step = step;
+            input.value = defaultVal;
+            input.oninput = () => {
+                valueSpan.textContent = parseFloat(input.value).toFixed(2);
+                sliderValues[labelText] = parseFloat(input.value);
+                updateResults();
+            };
+
+            sliderValues[labelText] = defaultVal;
+
+            label.appendChild(valueSpan);
+            div.appendChild(label);
+            div.appendChild(document.createElement("br"));
+            div.appendChild(input);
+            container.appendChild(div);
+        }
+    }
+
+    function updateResults() {
+        const s = sliderValues;
+
+        // f1-Berechnung
+        const f1_energy = (s["Ofenleistung in kW"] * (s["Aufschmelzzeit f1 (h)"] + s["Haltezeit f1 (h)"])) * s["Strompreis in Euro pro kWh"];
+        const f1_cost = (f1_energy / s["Chargengröße in Kilogramm"]) + s["Neualu Preis in Euro pro Kilogramm"];
+        const f1_total = f1_cost + f1_cost * s["Verschleiß/Zusatzkosten f1"];
+
+        // f2-Berechnung
+        const elec_part = (s["Ofenleistung in kW"] * (s["Aufschmelzzeit f2 (h)"] + s["Haltezeit f2 (h)"]) + s["Elek. Vorwärmzeit f2 (h)"] * s["Elek. Vorwärmleistung f2 (kW)"]) * s["Strompreis in Euro pro kWh"];
+        const gas_part = s["Gasvorwärmzeit f2 (h)"] * s["Gasverbrauch f2 (kg/h)"] * s["Gaspreis in Euro pro Kilogramm"];
+        const filter_cost = s["Filterpreis"];
+        const alcr_cost = s["AlCr20 Preis in Euro pro Kilogramm"] * s["AlCr20-Zugabe f2 (kg/kg)"];
+        const almn_cost = s["AlMn25 Preis in Euro pro Kilogramm"] * s["AlMn25-Zugabe f2 (kg/kg)"];
+        const scrap_cost = s["Schrottpreis in Euro pro Kilogramm"] * (1 + s["Verlust durch Filtration f2"]) * (1 + s["Verschleiß/Zusatzkosten f2"]);
+
+        const f2_total = (elec_part + gas_part + filter_cost + alcr_cost + almn_cost) / s["Chargengröße in Kilogramm"] + scrap_cost;
+
+        const diff = f2_total - f1_total;
+
+        document.getElementById("results").innerHTML = `
+            <p><strong style="color:#0077cc;">🔵 Preis OHNE Filtration (f1):</strong> ${f1_total.toFixed(4)} €/kg</p>
+            <p><strong style="color:#009944;">🟢 Preis MIT Filtration (f2):</strong> ${f2_total.toFixed(4)} €/kg</p>
+            <p><strong style="color:#cc0000;">🔻 Differenz (f2 - f1):</strong> ${diff >= 0 ? "+" : ""}${diff.toFixed(4)} €/kg</p>
+        `;
+    }
+
+    createSliders();
+    updateResults();
+</script>
+
+</body>
+</html>
